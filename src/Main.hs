@@ -1,8 +1,9 @@
 module Main where
 
-import qualified Data.ByteString as B
-import           Data.List       (transpose)
-import qualified Data.Text       as T
+import qualified Data.ByteString      as B
+import qualified Data.ByteString.Lazy as BL
+import           Data.List            (transpose)
+import qualified Data.Text            as T
 import           PFM
 
 data Direction = Horizontal | Vertical
@@ -46,16 +47,22 @@ findSplitLine d
     | otherwise = Cut Vertical . findSplitLine' $ transpose d
 
 drawCut' :: PFMColour -> Cut -> (Int, Int) -> PFMColour -> PFMColour
-drawCut' c (Cut Vertical n) (x, _) c'
-    | x == n || x == n - 1 = c
+drawCut' c (Cut Vertical n) (_, x) c'
+    | x == n = c
     | otherwise = c'
-drawCut' c (Cut Horizontal n) (_, y) c'
-    | y == n || y == n - 1 = c
+drawCut' c (Cut Horizontal n) (y, _) c'
+    | y == n = c
     | otherwise = c'
 
 drawCut :: PFMColour -> Cut -> [[PFMColour]] -> [[PFMColour]]
 drawCut c cut colour =
-    
+    (zipWith . zipWith) (drawCut' c cut) [ [ (y, x) | x <- [0..length $ head colour] ] | y <- [0..length colour] ] colour
+
+applyGamma :: Float -> PFMImage -> PFMImage
+applyGamma g (PFMImage w h c) =
+  PFMImage w h $ fmap gc <$> c
+  where
+    gc (PFMColour r gr b) = PFMColour (gamma g r) (gamma g gr) (gamma g b)
 
 main :: IO ()
 main = do
@@ -63,4 +70,8 @@ main = do
     let grace = revColour $ parse im
     let height = pfmHeight grace - 1
     let fixedIntensities = zipWith (cfmap $ fixIntensity height) [0..] $ pfmColour grace
-    print . findSplitLine $ fixedIntensities
+    let cut = findSplitLine fixedIntensities
+    let newColour = drawCut (PFMColour 0 1 0) cut $ pfmColour grace
+    print $ length newColour
+    print cut
+    BL.writeFile "data/final.ppm" . encodePPM . clampImage . applyGamma 2.2 $ PFMImage (pfmWidth grace) (pfmHeight grace) newColour
