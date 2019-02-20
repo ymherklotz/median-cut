@@ -1,0 +1,23 @@
+name: median-cut
+version: 0.1.0.0
+synopsis: Generate samples on an Environment Map using Median Cut.
+description: Generate samples on an Environment Map using Median Cut.
+homepage: https://github.com/ymherklotz/median-cut#readme
+license: BSD3
+license-file: LICENSE
+author: Yann Herklotz Grave
+maintainer: ymherklotz@gmail.com
+copyright: (c) 2019, Yann Herklotz Grave
+category: Graphics
+build-type: Simple
+cabal-version: >=1.10
+extra-source-files: README.md
+
+executable median-cut
+  hs-source-dirs: src
+  main-is: Main.hs
+  default-language: Haskell2010
+  build-depends: base >=4.7 && <5
+               , pfm >=0.1 && <0.2
+               , bytestring >=0.10 && <0.11
+               , text >=1.2 && <1.3
