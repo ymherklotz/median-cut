@@ -3,7 +3,7 @@ module Main where
 import           Data.Bifunctor       (Bifunctor, bimap)
 import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as BL
-import           Data.List            (transpose)
+import           Data.List            (foldl', transpose)
 import qualified Data.Text            as T
 import           Debug.Trace
 import           PFM
@@ -104,21 +104,57 @@ drawCentroid' ci s (xi, yi) (x, y) c
     | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
     | otherwise = c
 
-drawCentroid :: [[Double]] -> [[PFMColour]] -> [[PFMColour]]
-drawCentroid d c = (zipWith . zipWith) (drawCentroid' (PFMColour 0 0 1) 5 pt)
+drawCentroid :: PFMColour -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
+drawCentroid ic d c = (zipWith . zipWith) (drawCentroid' ic 5 pt)
     [ [ (y, x) | x <- [0 .. length $ head c] ] | y <- [0 .. length c] ]
     c
     where
         pt = findCentroid d
 
+drawCentroidBlack' :: PFMColour -> Int -> (Int, Int) -> (Int, Int) -> PFMColour -> PFMColour
+drawCentroidBlack' ci s (xi, yi) (x, y) _
+    | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
+    | otherwise = PFMColour 0 0 0
+
+drawCentroidBlack :: PFMColour -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
+drawCentroidBlack ic d c = (zipWith . zipWith) (drawCentroidBlack' ic 5 pt)
+    [ [ (y, x) | x <- [0 .. length $ head c] ] | y <- [0 .. length c] ]
+    c
+    where
+        pt = findCentroid d
+
+add :: PFMColour -> PFMColour -> PFMColour
+add (PFMColour r1 g1 b1) (PFMColour r2 g2 b2) =
+    PFMColour (r1+r2) (g1+g2) (b1+b2)
+add _ _ = error "Mono not supported"
+
+totalRadiance :: [[PFMColour]] -> PFMColour
+totalRadiance c = f $ f <$> c
+     where
+         f = foldl' add (PFMColour 0 0 0)
+
 recSplit :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
-recSplit 0 d c = drawCentroid d c
+recSplit 0 d c = drawCentroid (PFMColour 0 0 1) d c
 recSplit n d c = drawCut (PFMColour 1 1 1) cut a
   where
     cut  = findSplitLine d
     a    = combine cut . apply nrec $ split cut c
     (d1, d2) = split cut d
     nrec = bbimap (recSplit (n - 1)) (d1, d2)
+    apply (f, g) (a', c') = (f a', g c')
+
+norm :: PFMColour -> Double
+norm (PFMColour r g b) = (f r + f g + f b) / 3
+    where f = realToFrac
+
+recSplitRadiance :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
+recSplitRadiance 0 d c = drawCentroidBlack (totalRadiance c) d c
+recSplitRadiance n d c = a
+  where
+    cut  = findSplitLine d
+    a    = combine cut . apply nrec $ split cut c
+    (d1, d2) = split cut d
+    nrec = bbimap (recSplitRadiance (n - 1)) (d1, d2)
     apply (f, g) (a', c') = (f a', g c')
 
 main :: IO ()
@@ -128,12 +164,36 @@ main = do
     mapM_
         (\i ->
             let newColour = recSplit i (fIntens $ pfmColour grace) $ pfmColour grace
+                img = PFMImage (pfmWidth grace) (pfmHeight grace) newColour
             in  do
                     putStrLn $ "data/mc_" ++ show i ++ ".ppm"
                     BL.writeFile ("data/mc_" ++ show i ++ ".ppm")
                         . encodePPM
                         . clampImage
                         . applyGamma 2.2
-                        $ PFMImage (pfmWidth grace) (pfmHeight grace) newColour
+                        $ img
+                    putStrLn $ "data/mc_" ++ show i ++ ".pfm"
+                    BL.writeFile ("data/mc_" ++ show i ++ ".pfm")
+                        . encode
+                        . revColour
+                        $ img
         )
         [1 .. 10]
+    mapM_
+        (\i ->
+            let newColour = recSplitRadiance i (fIntens $ pfmColour grace) $ pfmColour grace
+                img = PFMImage (pfmWidth grace) (pfmHeight grace) newColour
+            in  do
+                    putStrLn $ "data/mc_rad_" ++ show i ++ ".ppm"
+                    BL.writeFile ("data/mc_rad_" ++ show i ++ ".ppm")
+                        . encodePPM
+                        . clampImage
+                        . applyGamma 2.2
+                        $ img
+                    putStrLn $ "data/mc_rad_" ++ show i ++ ".pfm"
+                    BL.writeFile ("data/mc_rad_" ++ show i ++ ".pfm")
+                        . encode
+                        . revColour
+                        $ img
+        )
+        [6]
