@@ -17,15 +17,15 @@ data Cut = Cut Direction Int
 bbimap :: Bifunctor p => (a -> d) -> p a a -> p d d
 bbimap a = bimap a a
 
-clamp :: PFMColour -> PPMColour
-clamp (PFMColour ri gi bi) = PPMColour (f ri) (f gi) (f bi)
+clamp :: Float -> PFMColour -> PPMColour
+clamp stop  (PFMColour ri gi bi) = PPMColour (f ri) (f gi) (f bi)
   where
-    v s = s * 255
+    v s = (s * (2 ** stop)) * 255
     f s = if v s > 255 then 255 else fromInteger (floor (v s))
-clamp _ = undefined
+clamp _ _ = undefined
 
-clampImage :: PFMImage -> PPMImage
-clampImage (PFMImage w h c) = PPMImage w h $ fmap clamp <$> c
+clampImage :: Float -> PFMImage -> PPMImage
+clampImage stop (PFMImage w h c) = PPMImage w h $ fmap (clamp stop) <$> c
 
 fixIntensity :: Int -> Int -> PFMColour -> Double
 fixIntensity sizeY y (PFMColour r g b) =
@@ -94,23 +94,23 @@ findCentroid d = (y, x)
     x = findSplitLine' $ transpose d
 
 drawCentroid' :: PFMColour -> Int -> (Int, Int) -> (Int, Int) -> PFMColour -> PFMColour
-drawCentroid' ci s (xi, yi) (x, y) c | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
+drawCentroid' ci s (xi, yi) (x, y) c | (x - xi)^2 + (y - yi)^2 < round ((fromIntegral s/2)**2) = ci
                                      | otherwise = c
 
 drawCentroid :: PFMColour -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
 drawCentroid ic d c = (zipWith . zipWith)
-    (drawCentroid' ic 5 pt)
+    (drawCentroid' ic 9 pt)
     [ [ (y, x) | x <- [0 .. length $ head c] ] | y <- [0 .. length c] ]
     c
     where pt = findCentroid d
 
 drawCentroidBlack' :: PFMColour -> Int -> (Int, Int) -> (Int, Int) -> PFMColour -> PFMColour
-drawCentroidBlack' ci s (xi, yi) (x, y) _ | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
+drawCentroidBlack' ci s (xi, yi) (x, y) _ | (x - xi)^2 + (y - yi)^2 < round ((fromIntegral s/2)**2) = ci
                                           | otherwise = PFMColour 0 0 0
 
 drawCentroidBlack :: PFMColour -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
 drawCentroidBlack ic d c = (zipWith . zipWith)
-    (drawCentroidBlack' ic 5 pt)
+    (drawCentroidBlack' (totalRadiance c) 9 pt)
     [ [ (y, x) | x <- [0 .. length $ head c] ] | y <- [0 .. length c] ]
     c
     where pt = findCentroid d
@@ -147,16 +147,17 @@ recSplitRadiance = recSplitGeneral drawCentroidBlack (\_ _ -> id)
 
 generateCuts
     :: Show a
-    => (a -> [[Double]] -> [[PFMColour]] -> [[PFMColour]])
+    => Float
+    -> (a -> [[Double]] -> [[PFMColour]] -> [[PFMColour]])
     -> PFMImage
     -> String
     -> a
     -> IO ()
-generateCuts splitFun image prefix i = do
+generateCuts stop splitFun image prefix i = do
     putStrLn $ "data/" ++ prefix ++ show i ++ ".ppm"
     BL.writeFile ("data/" ++ prefix ++ show i ++ ".ppm")
         . encodePPM
-        . clampImage
+        . clampImage stop
         . applyGamma 2.2
         $ img
     putStrLn $ "data/" ++ prefix ++ show i ++ ".pfm"
@@ -169,5 +170,5 @@ main :: IO ()
 main = do
     im <- B.readFile "data/grace_latlong.pfm"
     let grace = revColour $ parse im
-    mapM_ (generateCuts recSplit grace "median_cut")                  [1 .. 10]
-    mapM_ (generateCuts recSplitRadiance grace "median_cut_radiance") [6]
+    mapM_ (generateCuts 0 recSplit grace "median_cut")                  [1 .. 10]
+    mapM_ (generateCuts (-6) recSplitRadiance grace "median_cut_radiance") [6]
