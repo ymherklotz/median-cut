@@ -1,4 +1,4 @@
-module Main where
+module Main (main) where
 
 import           Data.Bifunctor       (Bifunctor, bimap)
 import qualified Data.ByteString      as B
@@ -33,18 +33,12 @@ fixIntensity sizeY y (PFMColour r g b) =
     where f = realToFrac
 fixIntensity _ _ _ = error "Mono not supported"
 
-findSplit_ :: [Double] -> Int
-findSplit_ d = findSplit'_ d [] 0
+findSplit :: [Double] -> Int
+findSplit d = findSplit'_ d [] 0
   where
     findSplit'_ (x : ds) e i | sum ds < sum e = i
                              | otherwise      = findSplit'_ ds (x : e) $ i + 1
     findSplit'_ _ _ i = i
-
-findSplit :: [Double] -> Int
-findSplit = round . findSplit'
-
-findSplit' :: [Double] -> Double
-findSplit' d = (/ sum d) . sum $ zipWith (*) [1 ..] d
 
 findEnergy :: [Double] -> (Double, Double)
 findEnergy d = bbimap sum $ splitAt (findSplit d) d
@@ -53,7 +47,7 @@ cfmap :: Functor f => (t -> a -> b) -> t -> f a -> f b
 cfmap f a b = f a <$> b
 
 findSplitLine' :: [[Double]] -> Int
-findSplitLine' = findSplit_ . fmap sum
+findSplitLine' = findSplit . fmap sum
 
 findSplitLine :: [[Double]] -> Cut
 findSplitLine d | length d > length (head d) = Cut Horizontal $ findSplitLine' d
@@ -84,7 +78,7 @@ applyGamma g (PFMImage w h c) = PFMImage w h $ fmap gc <$> c
 
 split :: Cut -> [[a]] -> ([[a]], [[a]])
 split (Cut Horizontal n) l = splitAt n l
-split (Cut Vertical   n) l = bbimap transpose $ splitAt n l' where l' = transpose l
+split (Cut Vertical   n) l = bbimap transpose . splitAt n $ transpose l
 
 combine :: Cut -> ([[a]], [[a]]) -> [[a]]
 combine (Cut Horizontal _) (a, b) = a ++ b
@@ -95,105 +89,85 @@ fIntens d = zipWith (cfmap . fixIntensity $ length d - 1) [0 ..] d
 
 findCentroid :: [[Double]] -> (Int, Int)
 findCentroid d = (y, x)
-    where
-        y = findSplitLine' d
-        x = findSplitLine' $ transpose d
+  where
+    y = findSplitLine' d
+    x = findSplitLine' $ transpose d
 
 drawCentroid' :: PFMColour -> Int -> (Int, Int) -> (Int, Int) -> PFMColour -> PFMColour
-drawCentroid' ci s (xi, yi) (x, y) c
-    | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
-    | otherwise = c
+drawCentroid' ci s (xi, yi) (x, y) c | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
+                                     | otherwise = c
 
 drawCentroid :: PFMColour -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
-drawCentroid ic d c = (zipWith . zipWith) (drawCentroid' ic 5 pt)
+drawCentroid ic d c = (zipWith . zipWith)
+    (drawCentroid' ic 5 pt)
     [ [ (y, x) | x <- [0 .. length $ head c] ] | y <- [0 .. length c] ]
     c
-    where
-        pt = findCentroid d
+    where pt = findCentroid d
 
 drawCentroidBlack' :: PFMColour -> Int -> (Int, Int) -> (Int, Int) -> PFMColour -> PFMColour
-drawCentroidBlack' ci s (xi, yi) (x, y) _
-    | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
-    | otherwise = PFMColour 0 0 0
+drawCentroidBlack' ci s (xi, yi) (x, y) _ | 2 * abs (x - xi) < s && 2 * abs (y - yi) < s = ci
+                                          | otherwise = PFMColour 0 0 0
 
 drawCentroidBlack :: PFMColour -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
-drawCentroidBlack ic d c = (zipWith . zipWith) (drawCentroidBlack' ic 5 pt)
+drawCentroidBlack ic d c = (zipWith . zipWith)
+    (drawCentroidBlack' ic 5 pt)
     [ [ (y, x) | x <- [0 .. length $ head c] ] | y <- [0 .. length c] ]
     c
-    where
-        pt = findCentroid d
+    where pt = findCentroid d
 
 add :: PFMColour -> PFMColour -> PFMColour
-add (PFMColour r1 g1 b1) (PFMColour r2 g2 b2) =
-    PFMColour (r1+r2) (g1+g2) (b1+b2)
-add _ _ = error "Mono not supported"
+add (PFMColour r1 g1 b1) (PFMColour r2 g2 b2) = PFMColour (r1 + r2) (g1 + g2) (b1 + b2)
+add _                    _                    = error "Mono not supported"
 
 totalRadiance :: [[PFMColour]] -> PFMColour
-totalRadiance c = f $ f <$> c
-     where
-         f = foldl' add (PFMColour 0 0 0)
+totalRadiance c = f $ f <$> c where f = foldl' add (PFMColour 0 0 0)
+
+recSplitGeneral
+    :: (Eq a1, Num a1)
+    => (PFMColour -> [[Double]] -> [[a2]] -> [[a3]])
+    -> (PFMColour -> Cut -> [[a3]] -> [[a3]])
+    -> a1
+    -> [[Double]]
+    -> [[a2]]
+    -> [[a3]]
+recSplitGeneral dFun _    0 d c = dFun (PFMColour 0 0 1) d c
+recSplitGeneral dFun dCut n d c = dCut (PFMColour 1 1 1) cut a
+  where
+    cut      = findSplitLine d
+    a        = combine cut . apply nrec $ split cut c
+    (d1, d2) = split cut d
+    nrec     = bbimap (recSplitGeneral dFun dCut (n - 1)) (d1, d2)
+    apply (f, g) (a', c') = (f a', g c')
 
 recSplit :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
-recSplit 0 d c = drawCentroid (PFMColour 0 0 1) d c
-recSplit n d c = drawCut (PFMColour 1 1 1) cut a
-  where
-    cut  = findSplitLine d
-    a    = combine cut . apply nrec $ split cut c
-    (d1, d2) = split cut d
-    nrec = bbimap (recSplit (n - 1)) (d1, d2)
-    apply (f, g) (a', c') = (f a', g c')
-
-norm :: PFMColour -> Double
-norm (PFMColour r g b) = (f r + f g + f b) / 3
-    where f = realToFrac
+recSplit = recSplitGeneral drawCentroid drawCut
 
 recSplitRadiance :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
-recSplitRadiance 0 d c = drawCentroidBlack (totalRadiance c) d c
-recSplitRadiance n d c = a
+recSplitRadiance = recSplitGeneral drawCentroidBlack (\_ _ -> id)
+
+generateCuts
+    :: Show a
+    => (a -> [[Double]] -> [[PFMColour]] -> [[PFMColour]])
+    -> PFMImage
+    -> String
+    -> a
+    -> IO ()
+generateCuts splitFun image prefix i = do
+    putStrLn $ "data/" ++ prefix ++ show i ++ ".ppm"
+    BL.writeFile ("data/" ++ prefix ++ show i ++ ".ppm")
+        . encodePPM
+        . clampImage
+        . applyGamma 2.2
+        $ img
+    putStrLn $ "data/" ++ prefix ++ show i ++ ".pfm"
+    BL.writeFile ("data/" ++ prefix ++ show i ++ ".pfm") . encode . revColour $ img
   where
-    cut  = findSplitLine d
-    a    = combine cut . apply nrec $ split cut c
-    (d1, d2) = split cut d
-    nrec = bbimap (recSplitRadiance (n - 1)) (d1, d2)
-    apply (f, g) (a', c') = (f a', g c')
+    newColour = splitFun i (fIntens $ pfmColour image) $ pfmColour image
+    img       = PFMImage (pfmWidth image) (pfmHeight image) newColour
 
 main :: IO ()
 main = do
     im <- B.readFile "data/grace_latlong.pfm"
     let grace = revColour $ parse im
-    mapM_
-        (\i ->
-            let newColour = recSplit i (fIntens $ pfmColour grace) $ pfmColour grace
-                img = PFMImage (pfmWidth grace) (pfmHeight grace) newColour
-            in  do
-                    putStrLn $ "data/mc_" ++ show i ++ ".ppm"
-                    BL.writeFile ("data/mc_" ++ show i ++ ".ppm")
-                        . encodePPM
-                        . clampImage
-                        . applyGamma 2.2
-                        $ img
-                    putStrLn $ "data/mc_" ++ show i ++ ".pfm"
-                    BL.writeFile ("data/mc_" ++ show i ++ ".pfm")
-                        . encode
-                        . revColour
-                        $ img
-        )
-        [1 .. 10]
-    mapM_
-        (\i ->
-            let newColour = recSplitRadiance i (fIntens $ pfmColour grace) $ pfmColour grace
-                img = PFMImage (pfmWidth grace) (pfmHeight grace) newColour
-            in  do
-                    putStrLn $ "data/mc_rad_" ++ show i ++ ".ppm"
-                    BL.writeFile ("data/mc_rad_" ++ show i ++ ".ppm")
-                        . encodePPM
-                        . clampImage
-                        . applyGamma 2.2
-                        $ img
-                    putStrLn $ "data/mc_rad_" ++ show i ++ ".pfm"
-                    BL.writeFile ("data/mc_rad_" ++ show i ++ ".pfm")
-                        . encode
-                        . revColour
-                        $ img
-        )
-        [6]
+    mapM_ (generateCuts recSplit grace "median_cut")                  [1 .. 10]
+    mapM_ (generateCuts recSplitRadiance grace "median_cut_radiance") [6]
