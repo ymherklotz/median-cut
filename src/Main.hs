@@ -44,7 +44,7 @@ findSplit :: [Double] -> Int
 findSplit d = findSplit' d [] 0
   where
     findSplit' (x : ds) e i | sum ds < sum e = i
-                             | otherwise      = findSplit' ds (x : e) $ i + 1
+                            | otherwise      = findSplit' ds (x : e) $ i + 1
     findSplit' _ _ i = i
 
 cfmap :: Functor f => (t -> a -> b) -> t -> f a -> f b
