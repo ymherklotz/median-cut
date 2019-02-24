@@ -139,10 +139,8 @@ recSplitGeneral dFun dCut n d c = dCut (PFMColour 1 1 1) cut a
     nrec     = bbimap (recSplitGeneral dFun dCut (n - 1)) (d1, d2)
     apply (f, g) (a', c') = (f a', g c')
 
-recSplit :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
+recSplitRadiance, recSplit :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
 recSplit = recSplitGeneral drawCentroid drawCut
-
-recSplitRadiance :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
 recSplitRadiance = recSplitGeneral drawCentroidBlack (\_ _ -> id)
 
 generateCuts
