@@ -18,15 +18,21 @@ data Cut = Cut Direction Int
 bbimap :: Bifunctor p => (a -> d) -> p a a -> p d d
 bbimap a = bimap a a
 
-clamp :: Float -> PFMColour -> PPMColour
-clamp stop (PFMColour ri gi bi) = PPMColour (f ri) (f gi) (f bi)
+clamp :: PFMColour -> PPMColour
+clamp (PFMColour ri gi bi) = PPMColour (f ri) (f gi) (f bi)
   where
-    v s = (s * (2 ** stop)) * 255
+    v = (255 *)
     f s = if v s > 255 then 255 else fromInteger (floor (v s))
-clamp _ _ = undefined
+clamp _ = undefined
 
-clampImage :: Float -> PFMImage -> PPMImage
-clampImage stop (PFMImage w h c) = PPMImage w h $ fmap (clamp stop) <$> c
+clampImage :: PFMImage -> PPMImage
+clampImage (PFMImage w h c) = PPMImage w h $ fmap clamp <$> c
+
+applyStop :: Float -> PFMImage -> PFMImage
+applyStop stop (PFMImage w h c) = PFMImage w h $ fmap multStop <$> c
+    where
+        multStop (PFMColour r g b) = PFMColour (f r) (f g) (f b)
+        f = ((2 ** stop) *)
 
 fixIntensity :: Int -> Int -> PFMColour -> Double
 fixIntensity sizeY y (PFMColour r g b) =
@@ -35,11 +41,11 @@ fixIntensity sizeY y (PFMColour r g b) =
 fixIntensity _ _ _ = error "Mono not supported"
 
 findSplit :: [Double] -> Int
-findSplit d = findSplit'_ d [] 0
+findSplit d = findSplit' d [] 0
   where
-    findSplit'_ (x : ds) e i | sum ds < sum e = i
-                             | otherwise      = findSplit'_ ds (x : e) $ i + 1
-    findSplit'_ _ _ i = i
+    findSplit' (x : ds) e i | sum ds < sum e = i
+                             | otherwise      = findSplit' ds (x : e) $ i + 1
+    findSplit' _ _ i = i
 
 cfmap :: Functor f => (t -> a -> b) -> t -> f a -> f b
 cfmap f a b = f a <$> b
@@ -155,8 +161,9 @@ generateCuts stop splitFun image prefix i = do
     putStrLn $ "data/" ++ prefix ++ show i ++ ".ppm"
     BL.writeFile ("data/" ++ prefix ++ show i ++ ".ppm")
         . encodePPM
-        . clampImage stop
+        . clampImage
         . applyGamma 2.2
+        . applyStop stop
         $ img
     putStrLn $ "data/" ++ prefix ++ show i ++ ".pfm"
     BL.writeFile ("data/" ++ prefix ++ show i ++ ".pfm")
@@ -174,7 +181,7 @@ convertPFMtoPPM name = do
     let image = revColour $ parse im
     BL.writeFile (name <> ".ppm")
         . encodePPM
-        . clampImage 0
+        . clampImage
         . applyGamma 2.2
         $ image
 
@@ -183,7 +190,7 @@ main = do
     im <- B.readFile "data/grace_latlong.pfm"
     let grace = revColour $ parse im
     mapM_ (generateCuts 0 recSplit grace "median_cut") [1, 2, 4, 6]
-    mapM_ (generateCuts (-6) recSplitRadiance grace "median_cut_radiance") [6]
+    mapM_ (generateCuts (-13) recSplitRadiance grace "median_cut_radiance") [6]
     mapM_ convertPFMtoPPM
         $   ("data/simple_sphere" <>)
         <$> ["08", "16", "32", "64"]
