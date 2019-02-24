@@ -121,7 +121,7 @@ add _ _ = error "Mono not supported"
 totalRadiance :: [[PFMColour]] -> PFMColour
 totalRadiance c = f $ f <$> c where f = foldl' add (PFMColour 0 0 0)
 
-recSplitGeneral
+makeRecSplit
     :: (Eq a1, Num a1)
     => (PFMColour -> [[Double]] -> [[a2]] -> [[a3]])
     -> (PFMColour -> Cut -> [[a3]] -> [[a3]])
@@ -129,19 +129,19 @@ recSplitGeneral
     -> [[Double]]
     -> [[a2]]
     -> [[a3]]
-recSplitGeneral dFun _    0 d c = dFun (PFMColour 0 0 1) d c
-recSplitGeneral dFun dCut n d c = dCut (PFMColour 1 1 1) cut a
+makeRecSplit dFun _    0 d c = dFun (PFMColour 0 0 1) d c
+makeRecSplit dFun dCut n d c = dCut (PFMColour 1 1 1) cut a
   where
     cut      = findSplitLine d
     a        = combine cut . apply nrec $ split cut c
     (d1, d2) = split cut d
-    nrec     = bbimap (recSplitGeneral dFun dCut (n - 1)) (d1, d2)
+    nrec     = bbimap (makeRecSplit dFun dCut (n - 1)) (d1, d2)
     apply (f, g) (a', c') = (f a', g c')
 
 recSplitRadiance, recSplit
     :: Int -> [[Double]] -> [[PFMColour]] -> [[PFMColour]]
-recSplit = recSplitGeneral drawCentroid drawCut
-recSplitRadiance = recSplitGeneral drawCentroidBlack (\_ _ -> id)
+recSplit = makeRecSplit drawCentroid drawCut
+recSplitRadiance = makeRecSplit drawCentroidBlack (\_ _ -> id)
 
 generateCuts
     :: Show a
