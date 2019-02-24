@@ -164,9 +164,20 @@ generateCuts stop splitFun image prefix i = do
     newColour = splitFun i (fIntens $ pfmColour image) $ pfmColour image
     img       = PFMImage (pfmWidth image) (pfmHeight image) newColour
 
+convertPFMtoPPM :: String -> IO ()
+convertPFMtoPPM name = do
+    im <- B.readFile $ name <> ".pfm"
+    let image = revColour $ parse im
+    BL.writeFile (name <> ".ppm")
+        . encodePPM
+        . clampImage 0
+        . applyGamma 2.2
+        $ image
+
 main :: IO ()
 main = do
     im <- B.readFile "data/grace_latlong.pfm"
     let grace = revColour $ parse im
     mapM_ (generateCuts 0 recSplit grace "median_cut")                  [1 .. 10]
     mapM_ (generateCuts (-6) recSplitRadiance grace "median_cut_radiance") [6]
+    mapM_ convertPFMtoPPM $ ("data/simple_sphere"<>) <$> ["08", "16", "32", "64"]
