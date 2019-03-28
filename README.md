@@ -1,5 +1,14 @@
 # Median Cut
 
+The median cut algorithm is a method to deterministically sample an environment
+map. This is achieved by splitting the environment map along the longest
+dimension so that there is equal energy in both halves. This is repeated _n_
+times recursively in each partition. Once there have been _n_ iterations, the
+lights are placed in the centroid of each region. Below is an example with 6
+splits, meaning there are 2^6 = 64 partitions.
+
+![median cut](/data/median_cut6.jpg)
+
 ## Build and run
 
 To compile and run, one has to first download
