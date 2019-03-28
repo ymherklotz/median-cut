@@ -9,6 +9,16 @@ splits, meaning there are 2^6 = 64 partitions.
 
 ![median cut](/data/median_cut6.jpg)
 
+The average colour of each region is assigned to each light source that was
+created in each region.
+
+![median cut lights](/data/median_cut_radiance6.png)
+
+Finally, these discrete lights can be used to light diffuse objects efficiently,
+by only having to sample a few lights.
+
+![lighting](/data/simple_sphere64.png)
+
 ## Build and run
 
 To compile and run, one has to first download
