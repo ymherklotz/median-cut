@@ -1,5 +1,7 @@
 # Median Cut
 
+## Build and run
+
 To compile and run, one has to first download
 [stack](https://docs.haskellstack.org/en/stable/README/)
 
@@ -18,7 +20,7 @@ stack setup
 Finally the executable can be built and run using the following:
 
 ```
-stack build --exec mirror-ball
+stack build --exec median-cut
 ```
 
 This project relies on a open source library that I wrote to load 
